@@ -29,6 +29,9 @@
 #define FILE_PREFIX "file:"
 #define FILE_PREFIX_LEN sizeof(FILE_PREFIX) - 1
 
+#define ENV_PREFIX "file:"
+#define ENV_PREFIX_LEN sizeof(ENV_PREFIX) - 1
+
 #define PCR_PREFIX "pcr:"
 #define PCR_PREFIX_LEN sizeof(PCR_PREFIX) - 1
 
@@ -44,6 +47,30 @@ static bool handle_hex_password(const char *password, TPM2B_AUTH *auth) {
         auth->size = 0;
         return false;
     }
+
+    return true;
+}
+
+static bool handle_env_password(const char *password, TPM2B_AUTH *auth) {
+
+    /* if it is env, then skip the prefix */
+    password += ENV_PREFIX_LEN;
+
+    /* get environment variable */
+    password = getenv(password);
+
+    /*
+     * Per the man page:
+     * "a return value of size or more means that the output was truncated."
+     */
+    size_t wrote = snprintf((char * )&auth->buffer,
+            BUFFER_SIZE(typeof(*auth), buffer), "%s", password);
+    if (wrote >= BUFFER_SIZE(typeof(*auth), buffer)) {
+        auth->size = 0;
+        return false;
+    }
+
+    auth->size = wrote;
 
     return true;
 }
@@ -77,6 +104,11 @@ static bool handle_password(const char *password, TPM2B_AUTH *auth) {
     bool is_hex = !strncmp(password, HEX_PREFIX, HEX_PREFIX_LEN);
     if (is_hex) {
         return handle_hex_password(password, auth);
+    }
+
+    bool is_env = !strncmp(password, ENV_PREFIX, ENV_PREFIX_LEN);
+    if (is_env) {
+        return handle_env_password(password, auth);
     }
 
     /* must be string, handle it */
